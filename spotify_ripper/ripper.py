@@ -73,11 +73,11 @@ class Ripper(threading.Thread):
     skip = threading.Event()
     play_token_resume = threading.Event()
 
-    def __init__(self, args):
+    def __init__(self, args, progress_obj=Progress):
         threading.Thread.__init__(self)
 
         # initialize progress meter
-        self.progress = Progress(args, self)
+        self.progress = progress_obj(args, self)
 
         self.args = args
 
@@ -224,21 +224,19 @@ class Ripper(threading.Thread):
                     return self.load_link(uri)
 
         # calculate total size and time
-        all_tracks = []
+        self.all_tracks = []
         for uri in uris:
             tracks = list(get_tracks_from_uri(uri))
 
             # TODO: remove dependency on current_album, ...
             for idx, track in enumerate(tracks):
-
                 # ignore local tracks
                 if track.is_local:
                     continue
 
-                audio_file = self.format_track_path(idx, track)
-                all_tracks.append((track, audio_file))
+                self.load_track(idx, track)
 
-        self.progress.calc_total(all_tracks)
+        self.progress.calc_total(self.all_tracks)
 
         if self.progress.total_size > 0:
             print(
@@ -612,8 +610,9 @@ class Ripper(threading.Thread):
         if track.link.uri in self.track_path_cache:
             return self.track_path_cache[track.link.uri]
 
+        tags = get_current_track_details(self, args.format.strip(), idx, track)
         audio_file = \
-            format_track_string(self, args.format.strip(), idx, track)
+            format_track_string(args.format.strip(), tags)
 
         # in case the file name is too long
         def truncate(_str, max_size):
@@ -826,3 +825,7 @@ class Ripper(threading.Thread):
     def abort_rip(self):
         self.ripping.clear()
         self.abort.set()
+
+    def load_track(self, idx, track):
+        audio_file = self.format_track_path(idx, track)
+        self.all_tracks.append((track, audio_file))
